@@ -1,7 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 
 from app.api.people import router as people_router
 from app.api.auth import router as auth_router
+
+from app.models.user import User
+from app.utils.auth_dependency import get_current_user
+
 
 app = FastAPI(
     title="ThirdEye",
@@ -10,9 +14,12 @@ app = FastAPI(
 )
 
 
+# Include API routers
 app.include_router(people_router)
 app.include_router(auth_router)
 
+
+# Root endpoint
 @app.get("/")
 def root():
     return {
@@ -21,8 +28,22 @@ def root():
     }
 
 
+# Health check
 @app.get("/health")
 def health_check():
     return {
         "status": "healthy"
+    }
+
+
+# Protected current-user endpoint
+@app.get("/me")
+def get_my_profile(
+    current_user: User = Depends(get_current_user)
+):
+    return {
+        "message": "Authenticated user",
+        "user_id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email
     }
