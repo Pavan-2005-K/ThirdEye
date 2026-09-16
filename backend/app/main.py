@@ -2,10 +2,10 @@ from fastapi import FastAPI, Depends
 
 from app.api.people import router as people_router
 from app.api.auth import router as auth_router
+from app.api.sketch import router as sketch_router
 
 from app.models.user import User
 from app.utils.auth_dependency import get_current_user
-
 
 app = FastAPI(
     title="ThirdEye",
@@ -17,6 +17,7 @@ app = FastAPI(
 # Include API routers
 app.include_router(people_router)
 app.include_router(auth_router)
+app.include_router(sketch_router)
 
 
 # Root endpoint
