@@ -5,26 +5,18 @@ from sqlalchemy.orm import Session
 
 from app.ai.embedding import generate_embedding
 from app.ai.similarity import calculate_similarity
+from app.ai.online_dataset import search_online_dataset
 from app.models.person import Person
 
 
 def search_registered_people(
     db: Session,
-    sketch_path: str,
+    sketch_embedding,
     top_k: int = 5
 ):
     """
-    Compare a sketch against all registered people
-    and return the highest similarity matches.
+    Search the Admin Dataset (Registered People).
     """
-
-    if not os.path.exists(sketch_path):
-        raise FileNotFoundError(
-            f"Sketch not found: {sketch_path}"
-        )
-
-    # Generate embedding for the uploaded sketch
-    sketch_embedding = generate_embedding(sketch_path)
 
     people = (
         db.query(Person)
@@ -52,24 +44,76 @@ def search_registered_people(
         )
 
         results.append({
+            "source": "admin_dataset",
             "person_id": person.id,
             "name": person.name,
             "age": person.age,
             "gender": person.gender,
             "address": person.address,
             "phone": person.phone,
-            "photo_path": person.photo_path,
-            "similarity": round(similarity, 4),
+            "photo_url": (
+            "/" + person.photo_path.replace("\\", "/")
+            ),
+            "similarity": round(
+                similarity,
+                4
+            ),
             "similarity_percentage": round(
                 similarity * 100,
                 2
             )
         })
 
-    # Highest similarity first
     results.sort(
         key=lambda x: x["similarity"],
         reverse=True
     )
 
     return results[:top_k]
+
+
+def search_all_datasets(
+    db: Session,
+    sketch_path: str,
+    top_k: int = 5
+):
+    """
+    Search both Online Dataset and Admin Dataset.
+    """
+
+    if not os.path.exists(sketch_path):
+        raise FileNotFoundError(
+            f"Sketch not found: {sketch_path}"
+        )
+
+    # Generate sketch embedding only once
+    sketch_embedding = generate_embedding(
+        sketch_path
+    )
+
+    # Search Admin Dataset
+    admin_results = search_registered_people(
+        db=db,
+        sketch_embedding=sketch_embedding,
+        top_k=top_k
+    )
+
+    # Search Online Dataset
+    online_results = search_online_dataset(
+        sketch_path=sketch_path,
+        top_k=top_k
+    )
+
+    # Combine both datasets
+    combined_results = (
+        admin_results +
+        online_results
+    )
+
+    # Sort highest similarity first
+    combined_results.sort(
+        key=lambda x: x["similarity"],
+        reverse=True
+    )
+
+    return combined_results[:top_k]

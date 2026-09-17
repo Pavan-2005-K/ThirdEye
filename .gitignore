@@ -42,3 +42,16 @@ uploads/
 
 # AI embeddings
 *.npy
+
+
+# FS2K dataset
+backend/data/online_dataset/FS2K/
+
+# Generated training pairs
+backend/data/online_dataset/FS2K/train_pairs.csv
+
+# Temporary online dataset images
+backend/data/online_dataset/images/
+
+# FS2K official repository/tools
+backend/fs2k_tools/

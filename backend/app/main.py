@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.staticfiles import StaticFiles
 
 from app.api.people import router as people_router
 from app.api.auth import router as auth_router
@@ -16,14 +17,48 @@ app = FastAPI(
 )
 
 
-# Include API routers
+# =========================================================
+# STATIC FILES
+# =========================================================
+
+# Uploaded files
+app.mount(
+    "/uploads",
+    StaticFiles(directory="uploads"),
+    name="uploads"
+)
+
+
+# Old dataset images
+app.mount(
+    "/dataset-images",
+    StaticFiles(directory="data/online_dataset/images"),
+    name="dataset-images"
+)
+
+
+# FS2K dataset photos
+app.mount(
+    "/fs2k-images",
+    StaticFiles(directory="data/online_dataset/FS2K/photo"),
+    name="fs2k-images"
+)
+
+
+# =========================================================
+# API ROUTERS
+# =========================================================
+
 app.include_router(people_router)
 app.include_router(auth_router)
 app.include_router(sketch_router)
 app.include_router(matching_router)
 
 
-# Root endpoint
+# =========================================================
+# ROOT ENDPOINT
+# =========================================================
+
 @app.get("/")
 def root():
     return {
@@ -32,7 +67,10 @@ def root():
     }
 
 
-# Health check
+# =========================================================
+# HEALTH CHECK
+# =========================================================
+
 @app.get("/health")
 def health_check():
     return {
@@ -40,7 +78,10 @@ def health_check():
     }
 
 
-# Protected current-user endpoint
+# =========================================================
+# CURRENT USER
+# =========================================================
+
 @app.get("/me")
 def get_my_profile(
     current_user: User = Depends(get_current_user)
