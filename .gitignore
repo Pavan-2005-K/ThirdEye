@@ -39,3 +39,6 @@ uploads/
 *.db
 *.sqlite
 *.sqlite3
+
+# AI embeddings
+*.npy
