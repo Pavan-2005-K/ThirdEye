@@ -1,12 +1,28 @@
 import os
-
 import numpy as np
+
 from sqlalchemy.orm import Session
 
-from app.ai.embedding import generate_embedding
+from app.ai.siamese_embedding import generate_siamese_embedding
 from app.ai.similarity import calculate_similarity
-from app.ai.online_dataset import search_online_dataset
 from app.models.person import Person
+
+
+FS2K_ROOT = "data/online_dataset/FS2K"
+
+FS2K_PHOTO_DIR = os.path.join(
+    FS2K_ROOT,
+    "photo"
+)
+
+FS2K_EMBEDDING_DIR = os.path.join(
+    FS2K_ROOT,
+    "embeddings_siamese_v2"
+)
+
+ADMIN_EMBEDDING_DIR = (
+    "data/admin_dataset/embeddings_siamese_v2"
+)
 
 
 def search_registered_people(
@@ -14,13 +30,9 @@ def search_registered_people(
     sketch_embedding,
     top_k: int = 5
 ):
-    """
-    Search the Admin Dataset (Registered People).
-    """
 
     people = (
         db.query(Person)
-        .filter(Person.embedding_path.isnot(None))
         .all()
     )
 
@@ -28,41 +40,154 @@ def search_registered_people(
 
     for person in people:
 
-        if not person.embedding_path:
-            continue
-
-        if not os.path.exists(person.embedding_path):
-            continue
-
-        person_embedding = np.load(
-            person.embedding_path
+        embedding_path = os.path.join(
+            ADMIN_EMBEDDING_DIR,
+            f"person_{person.id}.npy"
         )
 
-        similarity = calculate_similarity(
-            sketch_embedding,
-            person_embedding
-        )
+        # Skip people without a V2 embedding
+        if not os.path.exists(
+            embedding_path
+        ):
+            continue
 
-        results.append({
-            "source": "admin_dataset",
-            "person_id": person.id,
-            "name": person.name,
-            "age": person.age,
-            "gender": person.gender,
-            "address": person.address,
-            "phone": person.phone,
-            "photo_url": (
-            "/" + person.photo_path.replace("\\", "/")
-            ),
-            "similarity": round(
-                similarity,
-                4
-            ),
-            "similarity_percentage": round(
-                similarity * 100,
-                2
+        try:
+
+            person_embedding = np.load(
+                embedding_path
             )
-        })
+
+            similarity = calculate_similarity(
+                sketch_embedding,
+                person_embedding
+            )
+
+            results.append({
+                "source": "admin_dataset",
+                "person_id": person.id,
+                "name": person.name,
+                "age": person.age,
+                "gender": person.gender,
+                "address": person.address,
+                "phone": person.phone,
+                "photo_url": (
+                    "/"
+                    + person.photo_path.replace(
+                        "\\",
+                        "/"
+                    )
+                ),
+                "similarity": round(
+                    similarity,
+                    4
+                ),
+                "similarity_percentage": round(
+                    similarity * 100,
+                    2
+                )
+            })
+
+        except Exception:
+            continue
+
+    results.sort(
+        key=lambda x: x["similarity"],
+        reverse=True
+    )
+
+    return results[:top_k]
+
+
+def search_fs2k_dataset(
+    sketch_embedding,
+    top_k: int = 5
+):
+
+    if not os.path.exists(
+        FS2K_EMBEDDING_DIR
+    ):
+        return []
+
+    results = []
+
+    embedding_files = [
+        file
+        for file in os.listdir(
+            FS2K_EMBEDDING_DIR
+        )
+        if file.endswith(".npy")
+    ]
+
+    for embedding_file in embedding_files:
+
+        embedding_id = os.path.splitext(
+            embedding_file
+        )[0]
+
+        parts = embedding_id.split(
+            "_",
+            1
+        )
+
+        if len(parts) != 2:
+            continue
+
+        photo_folder = parts[0]
+        photo_name = parts[1]
+
+        photo_path = os.path.join(
+            FS2K_PHOTO_DIR,
+            photo_folder,
+            photo_name + ".jpg"
+        )
+
+        if not os.path.exists(
+            photo_path
+        ):
+            continue
+
+        embedding_path = os.path.join(
+            FS2K_EMBEDDING_DIR,
+            embedding_file
+        )
+
+        try:
+
+            dataset_embedding = np.load(
+                embedding_path
+            )
+
+            similarity = calculate_similarity(
+                sketch_embedding,
+                dataset_embedding
+            )
+
+            results.append({
+                "source": "FS2K",
+                "image_id": embedding_id,
+                "image_name": (
+                    f"{photo_folder}/{photo_name}"
+                ),
+                "photo_path": photo_path,
+                "image_url": (
+                    "/fs2k-images/"
+                    + photo_folder
+                    + "/"
+                    + photo_name
+                    + ".jpg"
+                ),
+                "similarity": round(
+                    similarity,
+                    4
+                ),
+                "similarity_percentage": round(
+                    similarity * 100,
+                    2
+                )
+            })
+
+        except Exception:
+            continue
 
     results.sort(
         key=lambda x: x["similarity"],
@@ -77,40 +202,41 @@ def search_all_datasets(
     sketch_path: str,
     top_k: int = 5
 ):
-    """
-    Search both Online Dataset and Admin Dataset.
-    """
 
-    if not os.path.exists(sketch_path):
+    if not os.path.exists(
+        sketch_path
+    ):
         raise FileNotFoundError(
             f"Sketch not found: {sketch_path}"
         )
 
-    # Generate sketch embedding only once
-    sketch_embedding = generate_embedding(
-        sketch_path
+    # Generate the user's sketch embedding
+    # using the trained Siamese V2 model.
+    sketch_embedding = (
+        generate_siamese_embedding(
+            sketch_path
+        )
     )
 
-    # Search Admin Dataset
+    # Search admin dataset
     admin_results = search_registered_people(
         db=db,
         sketch_embedding=sketch_embedding,
         top_k=top_k
     )
 
-    # Search Online Dataset
-    online_results = search_online_dataset(
-        sketch_path=sketch_path,
+    # Search FS2K dataset
+    online_results = search_fs2k_dataset(
+        sketch_embedding=sketch_embedding,
         top_k=top_k
     )
 
     # Combine both datasets
     combined_results = (
-        admin_results +
-        online_results
+        admin_results
+        + online_results
     )
 
-    # Sort highest similarity first
     combined_results.sort(
         key=lambda x: x["similarity"],
         reverse=True

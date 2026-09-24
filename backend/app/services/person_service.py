@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.models.person import Person
-from app.ai.person_embedding import create_person_embedding
+from app.ai.person_siamese_embedding import create_siamese_person_embedding
 
 
 def create_person(
@@ -26,10 +26,10 @@ def create_person(
     db.commit()
     db.refresh(person)
 
-    # Generate AI embedding after the person gets an ID
-    embedding_path = create_person_embedding(
+    # Generate V2 AI embedding after the person gets an ID
+    embedding_path = create_siamese_person_embedding(
         person_id=person.id,
-        image_path=photo_path
+        photo_path=photo_path
     )
 
     person.embedding_path = embedding_path
